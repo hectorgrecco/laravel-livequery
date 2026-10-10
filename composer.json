@@ -1,0 +1,69 @@
+{
+  "$schema": "https://getcomposer.org/schema.json",
+  "name": "hectorgrecco/laravel-livequery",
+  "description": "Keep Eloquent queries up to date with Laravel Reverb.",
+  "homepage": "https://github.com/hectorgrecco/laravel-livequery",
+  "type": "library",
+  "license": "MIT",
+  "keywords": [
+    "laravel",
+    "eloquent",
+    "reverb",
+    "realtime",
+    "broadcasting",
+    "livewire"
+  ],
+  "require": {
+    "php": "^8.3",
+    "illuminate/broadcasting": "^12.0|^13.0",
+    "illuminate/database": "^12.0|^13.0",
+    "illuminate/support": "^12.0|^13.0"
+  },
+  "require-dev": {
+    "laravel/framework": "^12.0|^13.0",
+    "orchestra/testbench": "^10.0|^11.0",
+    "pestphp/pest": "^4.0",
+    "laravel/pint": "^1.27",
+    "larastan/larastan": "^3.0"
+  },
+  "suggest": {
+    "laravel/reverb": "Required to run a Reverb WebSocket server.",
+    "livewire/livewire": "Required to use the optional Livewire and Volt listener trait."
+  },
+  "autoload": {
+    "psr-4": {
+      "LiveQuery\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "LiveQuery\\Tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "laravel": {
+      "providers": [
+        "LiveQuery\\LiveQueryServiceProvider"
+      ]
+    }
+  },
+  "scripts": {
+    "test": "pest",
+    "format": "pint",
+    "format:check": "pint --test",
+    "analyse": "phpstan analyse --memory-limit=1G",
+    "check": [
+      "@format:check",
+      "@analyse",
+      "@test"
+    ]
+  },
+  "config": {
+    "sort-packages": true,
+    "allow-plugins": {
+      "pestphp/pest-plugin": true
+    }
+  },
+  "minimum-stability": "stable",
+  "prefer-stable": true
+}
