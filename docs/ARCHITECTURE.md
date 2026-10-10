@@ -10,6 +10,8 @@ LiveQuery has four responsibilities: register model collections, observe Eloquen
 4. `LiveQueryInvalidated` implements Laravel's `ShouldDispatchAfterCommit` and `ShouldBroadcast` contracts. Laravel dispatches it after the outer transaction commits and sends it through the configured broadcasting connection.
 5. A private-channel subscriber receives only the collection name, then its application component reruns an independently authorized Eloquent query.
 
+Applications can call `LiveQuery::invalidate($collection, $tenant)` after writes that bypass Eloquent observers. That manual event follows the same after-commit and broadcast path; the application must identify every affected tenant.
+
 The broadcast path performs no recipient lookup and serializes no model. Its work grows with the number of registered collections for the changed model and broadcasting fanout for the tenant channel.
 
 ## Authorization boundaries
@@ -25,3 +27,5 @@ Collection registration is application configuration held by the singleton manag
 ## Delivery semantics
 
 Laravel transaction callbacks prevent publishing before a successful commit and discard callbacks on rollback. The database commit and external broadcast are not one atomic operation: a process or queue failure after commit can lose a notification. This package does not provide an outbox, replay, exactly-once delivery, or automatic recovery for disconnected clients.
+
+The optional `@liveQueryScripts` directive dispatches a Livewire refresh when Echo's Reverb connection becomes connected and when a hidden page becomes visible. Components then execute their current query and authorization again. It performs no event replay and cannot revoke data already rendered in an open browser tab.

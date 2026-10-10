@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Event;
 use InvalidArgumentException;
 use LiveQuery\Events\LiveQueryInvalidated;
 use LiveQuery\Observers\LiveQueryObserver;
+use LiveQuery\Support\ChannelName;
 
 final class LiveQueryManager
 {
@@ -20,9 +21,14 @@ final class LiveQueryManager
 
     /**
      * @param  Closure(mixed, string): bool  $authorize
+     * @param  array<mixed>  $guards
      */
-    public function register(string $name, string $model, string $tenantColumn, Closure $authorize): CollectionDefinition
+    public function register(string $name, string $model, string $tenantColumn, Closure $authorize, array $guards = []): CollectionDefinition
     {
+        if (! array_is_list($guards) || array_filter($guards, fn (mixed $guard): bool => ! is_string($guard) || ! preg_match('/^[a-zA-Z0-9_-]+$/D', $guard))) {
+            throw new InvalidArgumentException('Broadcast guards must be a list of guard names.');
+        }
+
         if (isset($this->collections[$name])) {
             throw new InvalidArgumentException("LiveQuery collection [{$name}] is already registered.");
         }
@@ -40,7 +46,7 @@ final class LiveQueryManager
         // Every subscription MUST be authenticated with an application-supplied policy.
         Broadcast::channel("livequery.{$name}.{tenant}", function (mixed $user, string $tenant) use ($name): bool {
             return $this->collections[$name]->authorizes($user, $tenant);
-        });
+        }, $guards === [] ? [] : ['guards' => $guards]);
 
         return $definition;
     }
@@ -51,6 +57,21 @@ final class LiveQueryManager
         $names = $this->byModel[$model::class] ?? [];
 
         return array_map(fn (string $name): CollectionDefinition => $this->collections[$name], $names);
+    }
+
+    public function invalidate(string $name, int|string $tenant): void
+    {
+        if (! isset($this->collections[$name])) {
+            throw new InvalidArgumentException("LiveQuery collection [{$name}] is not registered.");
+        }
+
+        $key = ChannelName::normalizeTenant($tenant);
+
+        if ($key === null) {
+            throw new InvalidArgumentException('A tenant key is required.');
+        }
+
+        Event::dispatch(new LiveQueryInvalidated($name, $key));
     }
 
     public function changed(Model $model, string $operation): void
@@ -65,7 +86,7 @@ final class LiveQueryManager
 
             foreach (array_unique(array_filter($tenants, fn (?string $tenant): bool => $tenant !== null)) as $tenant) {
                 // Laravel delays dispatch until the outer transaction commits.
-                Event::dispatch(new LiveQueryInvalidated($definition->name, $tenant));
+                $this->invalidate($definition->name, $tenant);
             }
         }
     }

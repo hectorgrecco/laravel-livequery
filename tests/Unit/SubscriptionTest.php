@@ -14,8 +14,11 @@ it('builds private Echo listeners without handwritten events', function (): void
     };
 
     expect($component->getListeners())->toBe([
+        'livequery-resync' => 'refreshLiveQueries',
         'echo-private:livequery.orders.acme,.livequery.invalidated' => 'refreshLiveQueries',
     ]);
+
+    $component->refreshLiveQueries();
 });
 
 it('allows a component to merge live query listeners into its own listeners', function (): void {
@@ -36,6 +39,7 @@ it('allows a component to merge live query listeners into its own listeners', fu
 
     expect($component->getListeners())->toBe([
         'custom.event' => 'handleCustomEvent',
+        'livequery-resync' => 'refreshLiveQueries',
         'echo-private:livequery.orders.acme,.livequery.invalidated' => 'refreshLiveQueries',
     ]);
 });

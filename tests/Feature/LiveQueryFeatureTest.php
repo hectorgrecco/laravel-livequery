@@ -1,9 +1,12 @@
 <?php
 
+use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
 use LiveQuery\CollectionDefinition;
 use LiveQuery\Events\LiveQueryInvalidated;
+use LiveQuery\Facades\LiveQuery as LiveQueryFacade;
 use LiveQuery\LiveQueryManager;
 use LiveQuery\Tests\Fixtures\Order;
 
@@ -49,6 +52,90 @@ it('denies malformed tenant keys before calling the authorization callback', fun
         ->and($callbackWasCalled)->toBeFalse();
 });
 
+it('requires a registered model and a simple tenant column', function (): void {
+    expect(fn () => new CollectionDefinition(
+        name: 'invoices',
+        model: stdClass::class,
+        tenantColumn: 'tenant_id',
+        authorize: fn (): bool => true,
+    ))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => new CollectionDefinition(
+            name: 'invoices',
+            model: Order::class,
+            tenantColumn: 'tenant-id',
+            authorize: fn (): bool => true,
+        ))->toThrow(InvalidArgumentException::class);
+});
+
+it('denies when the authorization callback returns false', function (): void {
+    $definition = new CollectionDefinition(
+        name: 'invoices',
+        model: Order::class,
+        tenantColumn: 'tenant_id',
+        authorize: fn (mixed $user, string $tenant): bool => false,
+    );
+
+    expect($definition->authorizes((object) ['id' => 1], 'company_a'))->toBeFalse();
+});
+
+it('rejects non-scalar tenant attributes', function (): void {
+    $definition = new CollectionDefinition(
+        name: 'invoices',
+        model: Order::class,
+        tenantColumn: 'tenant_id',
+        authorize: fn (): bool => true,
+    );
+    $order = new Order;
+    $order->setAttribute('tenant_id', true);
+
+    expect(fn () => $definition->currentTenant($order))->toThrow(InvalidArgumentException::class);
+});
+
+it('returns null for a model without current or original tenant values', function (): void {
+    $definition = new CollectionDefinition(
+        name: 'invoices',
+        model: Order::class,
+        tenantColumn: 'tenant_id',
+        authorize: fn (): bool => true,
+    );
+    $order = new Order;
+
+    expect($definition->currentTenant($order))->toBeNull()
+        ->and($definition->originalTenant($order))->toBeNull();
+});
+
+it('returns no collections for an unregistered model', function (): void {
+    $model = new class extends Model {};
+
+    expect(app(LiveQueryManager::class)->collectionsFor($model))->toBe([]);
+});
+
+it('rejects invalid channel guard configurations', function (): void {
+    expect(fn () => app(LiveQueryManager::class)->register(
+        name: 'invoices',
+        model: Order::class,
+        tenantColumn: 'tenant_id',
+        authorize: fn (): bool => true,
+        guards: ['web', '../admin'],
+    ))->toThrow(InvalidArgumentException::class);
+});
+
+it('rejects duplicate collection registrations', function (): void {
+    expect(fn () => app(LiveQueryManager::class)->register(
+        name: 'orders',
+        model: Order::class,
+        tenantColumn: 'tenant_id',
+        authorize: fn (): bool => true,
+    ))->toThrow(InvalidArgumentException::class);
+});
+
+it('renders the reconnect and visibility recovery script', function (): void {
+    expect(Blade::render('@liveQueryScripts'))
+        ->toContain('window.__liveQueryResyncBound')
+        ->toContain("Livewire.dispatch('livequery-resync')")
+        ->toContain("document.addEventListener('visibilitychange'");
+});
+
 it('emits a minimal event on create without exposing model fields', function (): void {
     $events = [];
     Event::listen(LiveQueryInvalidated::class, function (LiveQueryInvalidated $event) use (&$events): void {
@@ -59,7 +146,24 @@ it('emits a minimal event on create without exposing model fields', function ():
 
     expect($events)->toHaveCount(1)
         ->and($events[0]->broadcastWith())->toBe(['collection' => 'orders'])
-        ->and($events[0]->broadcastAs())->toBe('livequery.invalidated');
+        ->and($events[0]->broadcastAs())->toBe('livequery.invalidated')
+        ->and((string) $events[0]->broadcastOn()[0])->toBe('private-livequery.orders.company_a');
+});
+
+it('supports manual invalidation for writes that bypass Eloquent events', function (): void {
+    $events = [];
+    Event::listen(LiveQueryInvalidated::class, function (LiveQueryInvalidated $event) use (&$events): void {
+        $events[] = $event;
+    });
+
+    LiveQueryFacade::invalidate('orders', 'company_a');
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]->broadcastWith())->toBe(['collection' => 'orders'])
+        ->and(fn () => app(LiveQueryManager::class)->invalidate('missing', 'company_a'))
+        ->toThrow(InvalidArgumentException::class)
+        ->and(fn () => LiveQueryFacade::invalidate('orders', ''))
+        ->toThrow(InvalidArgumentException::class);
 });
 
 it('defers invalidation until commit and does not dispatch rolled-back events', function (): void {
@@ -101,6 +205,43 @@ it('invalidates both tenants when a record changes tenant', function (): void {
     expect($tenants)->toBe(['company_a', 'company_b']);
 });
 
+it('notifies each collection registered for the changed model', function (): void {
+    app(LiveQueryManager::class)->register(
+        name: 'all_orders',
+        model: Order::class,
+        tenantColumn: 'tenant_id',
+        authorize: fn (): bool => true,
+    );
+
+    $events = [];
+    Event::listen(LiveQueryInvalidated::class, function (LiveQueryInvalidated $event) use (&$events): void {
+        $events[] = $event;
+    });
+
+    Order::create(['tenant_id' => 'company_a', 'status' => 'pending']);
+
+    expect(array_map(fn (LiveQueryInvalidated $event): string => $event->collection, $events))
+        ->toBe(['orders', 'all_orders']);
+});
+
+it('waits until commit before invalidating create and delete transitions', function (): void {
+    $events = [];
+    Event::listen(LiveQueryInvalidated::class, function (LiveQueryInvalidated $event) use (&$events): void {
+        $events[] = $event;
+    });
+
+    DB::transaction(function () use (&$events): void {
+        $order = Order::create(['tenant_id' => 'company_a', 'status' => 'pending']);
+        $order->delete();
+
+        expect($events)->toBe([]);
+    });
+
+    expect($events)->toHaveCount(2)
+        ->and(array_map(fn (LiveQueryInvalidated $event): string => $event->tenant, $events))
+        ->toBe(['company_a', 'company_a']);
+});
+
 it('does not claim to capture bulk updates that bypass model events', function (): void {
     Order::create(['tenant_id' => 'company_a', 'status' => 'pending']);
     $events = [];
@@ -121,6 +262,19 @@ it('emits invalidations when a model is deleted', function (): void {
     });
 
     $order->delete();
+
+    expect($events)->toHaveCount(1)
+        ->and($events[0]->tenant)->toBe('company_a');
+});
+
+it('emits an invalidation when a soft-deletable model is force deleted', function (): void {
+    $order = Order::create(['tenant_id' => 'company_a', 'status' => 'pending']);
+    $events = [];
+    Event::listen(LiveQueryInvalidated::class, function (LiveQueryInvalidated $event) use (&$events): void {
+        $events[] = $event;
+    });
+
+    $order->forceDelete();
 
     expect($events)->toHaveCount(1)
         ->and($events[0]->tenant)->toBe('company_a');

@@ -11,3 +11,9 @@ it('rejects invalid collection and tenant identifiers', function (): void {
     expect(fn () => ChannelName::for('orders', 'other.tenant'))->toThrow(InvalidArgumentException::class);
     expect(fn () => ChannelName::for('orders', ''))->toThrow(InvalidArgumentException::class);
 });
+
+it('normalizes integer tenant keys and represents missing keys as null', function (): void {
+    expect(ChannelName::normalizeTenant(42))->toBe('42')
+        ->and(ChannelName::normalizeTenant(null))->toBeNull()
+        ->and(ChannelName::normalizeTenant(''))->toBeNull();
+});

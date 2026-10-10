@@ -21,7 +21,7 @@ trait InteractsWithLiveQueries
 
     public function getListeners(): array
     {
-        return $this->liveQueryListeners();
+        return ['livequery-resync' => 'refreshLiveQueries'] + $this->liveQueryListeners();
     }
 
     /**
@@ -29,7 +29,7 @@ trait InteractsWithLiveQueries
      */
     protected function liveQueryListeners(): array
     {
-        $listeners = [];
+        $listeners = ['livequery-resync' => 'refreshLiveQueries'];
 
         foreach ($this->liveQuerySubscriptions() as $collection => $tenant) {
             $channel = ChannelName::for($collection, $tenant);

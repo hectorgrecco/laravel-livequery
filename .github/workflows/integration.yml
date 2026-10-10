@@ -1,0 +1,81 @@
+name: Integration
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  postgres:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: livequery_package_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: livequery
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d livequery_package_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, curl, pdo_pgsql, pgsql
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: demo/package-lock.json
+      - name: Install package dependencies
+        run: composer install --prefer-dist --no-interaction --no-progress
+      - name: Run PostgreSQL package suite
+        env:
+          LIVEQUERY_TEST_DRIVER: pgsql
+          LIVEQUERY_TEST_DATABASE: livequery_package_test
+          LIVEQUERY_TEST_USERNAME: postgres
+          LIVEQUERY_TEST_PASSWORD: livequery
+        run: composer test
+      - name: Install demo dependencies
+        working-directory: demo
+        run: |
+          composer install --prefer-dist --no-interaction --no-progress
+          npm ci
+          cp .env.example .env
+          sed -i 's/DB_PASSWORD=/DB_PASSWORD=livequery/' .env
+          php artisan key:generate
+          php artisan vendor:publish --tag=permission-migrations --force
+          php artisan vendor:publish --tag=permission-config --force
+          php artisan migrate:fresh --seed --force
+          npm run build
+          npx playwright install --with-deps chromium
+      - name: Run Reverb and browser integration
+        working-directory: demo
+        run: |
+          php artisan reverb:start --host=127.0.0.1 --port=8080 >/tmp/livequery-reverb.log 2>&1 &
+          reverb_pid=$!
+          php artisan queue:work --sleep=1 --tries=1 --timeout=10 >/tmp/livequery-queue.log 2>&1 &
+          queue_pid=$!
+          php artisan serve --host=127.0.0.1 --port=8000 >/tmp/livequery-http.log 2>&1 &
+          http_pid=$!
+          trap 'kill "$reverb_pid" "$queue_pid" "$http_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:8000/up >/dev/null; then break; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:8000/up >/dev/null
+          php benchmark.php
+          php artisan migrate:fresh --seed --force
+          node fanout.mjs
+          php artisan migrate:fresh --seed --force
+          node smoke.mjs

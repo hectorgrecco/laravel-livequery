@@ -58,3 +58,19 @@ jobs:
       - run: composer audit
       - run: composer format:check
       - run: composer analyse
+
+  coverage:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: mbstring, dom, curl, pdo_sqlite, sqlite3
+          coverage: pcov
+      - name: Composer dependencies
+        run: |
+          composer require --dev "laravel/framework:13.*" "orchestra/testbench:11.*" --no-interaction --no-update
+          composer update --prefer-dist --no-interaction --no-progress
+      - name: Enforce package line coverage
+        run: composer test:coverage
