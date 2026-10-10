@@ -24,6 +24,6 @@ After adding pre-save tenant-key validation, one run took 340.55 ms (about 2,936
 
 Command: `cd demo && node fanout.mjs`, with the demo HTTP server, Reverb server, and database queue worker running.
 
-Ten independent authenticated browser sessions subscribed to the same tenant channel while 100 orders were created in one database transaction. Reverb and the asynchronous database queue delivered the invalidations. All ten rendered queries ended with 100 visible orders. Two local runs took 1,894 ms and 1,730 ms; browsers made 33 and 36 Livewire refresh requests in aggregate.
+Ten independent authenticated browser sessions subscribed to the same tenant channel while 100 orders were created in one database transaction. Reverb and the asynchronous database queue delivered the invalidations. All ten rendered queries ended with 100 visible orders. Three local runs took 1,894 ms, 1,730 ms, and 974 ms; browsers made 33, 36, and 35 Livewire refresh requests in aggregate.
 
 This is a bounded smoke workload on one local machine. It does not establish a supported client limit, worst-case latency, or production capacity. Network distance, database query shape, queue latency, page filters, browser scheduling, and tenant fanout change the result. LiveQuery does not debounce broadcasts or coordinate query work across users.
