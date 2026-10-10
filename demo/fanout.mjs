@@ -14,7 +14,7 @@ try {
         const context = await browser.newContext();
         const page = await context.newPage();
         page.setDefaultTimeout(120000);
-        await page.goto(`${base}/demo/login/3`);
+        await page.goto(`${base}/demo/login/direct@example.test`);
         await page.waitForURL('**/orders');
         await page.getByTestId('orders').waitFor();
         await page.waitForFunction(() => window.Echo?.connector?.pusher?.connection?.state === 'connected');

@@ -1,6 +1,9 @@
 <?php
 
+use Illuminate\Broadcasting\BroadcastManager;
+use Illuminate\Contracts\Broadcasting\Broadcaster;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Blade;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Event;
@@ -311,6 +314,73 @@ it('does not publish an invalidation when an outer transaction rolls back', func
     DB::rollBack();
 
     expect($events)->toBe([]);
+});
+
+it('waits for the outer commit after a nested transaction commits', function (): void {
+    $events = [];
+    Event::listen(LiveQueryInvalidated::class, function (LiveQueryInvalidated $event) use (&$events): void {
+        $events[] = $event;
+    });
+
+    DB::beginTransaction();
+    DB::transaction(function (): void {
+        Order::create(['tenant_id' => 'company_a', 'status' => 'pending']);
+    });
+
+    expect($events)->toBe([]);
+
+    DB::commit();
+
+    expect($events)->toHaveCount(1);
+});
+
+it('discards callbacks from a transaction attempt that Laravel retries', function (): void {
+    $events = [];
+    $attempts = 0;
+    Event::listen(LiveQueryInvalidated::class, function (LiveQueryInvalidated $event) use (&$events): void {
+        $events[] = $event;
+    });
+
+    DB::transaction(function () use (&$attempts): void {
+        $attempts++;
+        Order::create(['tenant_id' => 'company_a', 'status' => 'pending']);
+
+        if ($attempts === 1) {
+            throw new QueryException('testing', 'select 1', [], new RuntimeException('deadlock detected'));
+        }
+    }, attempts: 2);
+
+    expect($attempts)->toBe(2)
+        ->and(Order::query()->count())->toBe(1)
+        ->and($events)->toHaveCount(1);
+});
+
+it('keeps a committed database write when the broadcaster fails after commit', function (): void {
+    app(BroadcastManager::class)->extend('throwing', fn () => new class implements Broadcaster
+    {
+        public function auth($request)
+        {
+            return null;
+        }
+
+        public function validAuthenticationResponse($request, $result)
+        {
+            return null;
+        }
+
+        public function broadcast(array $channels, $event, array $payload = []): void
+        {
+            throw new RuntimeException('Broadcast transport failed');
+        }
+    });
+    config(['broadcasting.connections.throwing' => ['driver' => 'throwing']]);
+    config(['broadcasting.default' => 'throwing']);
+    app(BroadcastManager::class)->purge('throwing');
+
+    expect(fn () => DB::transaction(function (): void {
+        Order::create(['tenant_id' => 'company_a', 'status' => 'pending']);
+    }))->toThrow(RuntimeException::class, 'Broadcast transport failed')
+        ->and(Order::query()->count())->toBe(1);
 });
 
 it('invalidates restored records using their tenant', function (): void {

@@ -1,6 +1,6 @@
 # RFC 0001: Tenant-scoped Eloquent LiveQuery invalidation over Reverb
 
-Status: **prototype / independent package**
+Status: **preview / independent package**
 Date: 2026-10-10
 
 ## Problem
@@ -19,11 +19,11 @@ An initial package should centralize these conventions while leaving Eloquent an
 6. Be self-hosted with native Laravel broadcasting, Reverb and queue infrastructure.
 7. Be simple enough to test with Pest and Orchestra Testbench.
 
-## Non-goals for V0
+## Explicit limitations
 
 - Incremental INSERT/UPDATE/DELETE payloads; arbitrary `Builder` AST/dependency inspection.
 - SQL triggers, WAL/CDC, database writes executed outside Eloquent events.
-- Automatic browser reconnect recovery, durable event log or replay.
+- Durable event log or replay.
 - Query deduplication, database caching, realtime pagination or range backfill.
 - Authorization inference from Eloquent scopes; application must provide a policy.
 
@@ -61,7 +61,7 @@ No model values, raw SQL, primary key or other tenant metadata are in the broadc
 - A failed dispatch after commit is not durable. Transactional outbox is a future enhancement.
 - Observers are not called for mass updates, quiet saves, raw queries, or external writers. We explicitly do not promise completeness without CDC.
 - A client cannot infer authorized visibility from a broadcast; every Eloquent query must scope itself to the authenticated user's tenant.
-- A temporarily disconnected client may miss events. Until reconnect resync is implemented, the application must refresh on reconnection or full navigation.
+- A temporarily disconnected client may miss events. The optional script can trigger an authorized fresh query when Echo reconnects or a hidden page becomes visible, but it does not replay events.
 - Broadcasting queues, Redis, Reverb and Laravel jobs are operated by the installing application.
 
 ## Performance

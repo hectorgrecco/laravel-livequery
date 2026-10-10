@@ -22,6 +22,7 @@ new class extends Component {
         return Order::query()
             ->where('tenant_id', auth()->user()->tenant_id)
             ->where('status', 'pending')
+            ->orderBy('priority')
             ->orderBy('id')
             ->get();
     }
@@ -57,6 +58,14 @@ new class extends Component {
         unset($this->orders, $this->completedOrders);
     }
 
+    public function moveOrderToTop(int $id): void
+    {
+        $order = Order::query()->where('tenant_id', auth()->user()->tenant_id)->findOrFail($id);
+        Gate::authorize('viewTenantOrders', $order->tenant_id);
+        $order->update(['priority' => (Order::query()->where('tenant_id', $order->tenant_id)->min('priority') ?? 0) - 1]);
+        unset($this->orders);
+    }
+
     public function deleteOrder(int $id): void
     {
         $order = Order::query()->where('tenant_id', auth()->user()->tenant_id)->findOrFail($id);
@@ -90,6 +99,7 @@ new class extends Component {
         @forelse ($this->orders as $order)
             <li wire:key="order-{{ $order->id }}" data-order-id="{{ $order->id }}">
                 <span>{{ $order->name }} — {{ $order->status }}</span>
+                <button wire:click="moveOrderToTop({{ $order->id }})">Move to top</button>
                 <button wire:click="completeOrder({{ $order->id }})">Complete</button>
                 <button wire:click="deleteOrder({{ $order->id }})">Delete</button>
             </li>
@@ -109,5 +119,5 @@ new class extends Component {
             <li wire:key="deleted-{{ $order->id }}">{{ $order->name }} <button wire:click="restoreOrder({{ $order->id }})">Restore</button></li>
         @endforeach
     </ul>
-    @liveQueryScripts
+    <a href="/demo/away" wire:navigate data-testid="leave-orders">Leave orders</a>
 </div>

@@ -8,9 +8,9 @@
 - [ ] Enable private vulnerability reporting or configure a private security address
 - [x] Run Pest, Pint, Larastan, Composer validation and dependency audit on PHP 8.4
 - [x] Install by Composer path in a clean Laravel 13 app; verify package discovery, queued log broadcast, and queued event publication to a local Reverb server
-- [ ] Validate PHP 8.3/8.4/8.5 and Laravel 12/13 in Actions
-- [ ] Manually run end-to-end Reverb/Volt demo with separate authenticated tenants
-- [ ] Check rollback, tenant move, bulk update omission and network failure
+- [x] Validate PHP 8.3/8.4/8.5 and Laravel 12/13 in Actions
+- [x] Run end-to-end Reverb/Volt demo with separate authenticated tenants
+- [x] Check rollback, tenant move, bulk update omission, and missed-event recovery after disconnect
 - [ ] Add an actual demo video or GIF showing records entering/exiting a filtered list
 - [ ] Run security review before tagging a release
 
@@ -34,7 +34,7 @@ The idea is deliberately small: register a model with a tenant authorization pol
 
 It's a preview, not a SQL changefeed. Bulk SQL updates, offline replay and incremental query diffs aren't supported yet. I'm looking for feedback on authorization boundaries, missing change paths, and whether the extra abstraction is useful enough compared with native broadcasting.
 
-[https://github.com/hectorgrecco/laravel-livequery] (no live demo has been verified yet)
+[https://github.com/hectorgrecco/laravel-livequery] (the repository includes a reproducible Reverb/Volt browser smoke test)
 
 ## Draft Laravel core discussion — human rewrite required
 

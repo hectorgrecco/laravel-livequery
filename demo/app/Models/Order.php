@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-#[Fillable(['tenant_id', 'name', 'status'])]
+#[Fillable(['tenant_id', 'name', 'status', 'priority'])]
 class Order extends Model
 {
     use SoftDeletes;

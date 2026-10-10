@@ -25,6 +25,11 @@ class DatabaseSeeder extends Seeder
             'name' => 'Tenant B', 'tenant_id' => 'tenant-b', 'password' => Hash::make('secret'),
         ]);
 
+        $tenantBReader = User::firstOrCreate(['email' => 'tenant-b-reader@example.test'], [
+            'name' => 'Tenant B reader', 'tenant_id' => 'tenant-b', 'password' => Hash::make('secret'),
+        ]);
+        $tenantBReader->givePermissionTo($permission);
+
         $direct = User::firstOrCreate(['email' => 'direct@example.test'], [
             'name' => 'Direct permission', 'tenant_id' => 'tenant-a', 'password' => Hash::make('secret'),
         ]);

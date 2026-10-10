@@ -13,6 +13,7 @@ return new class extends Migration
             $table->string('tenant_id')->index();
             $table->string('name');
             $table->string('status')->index();
+            $table->integer('priority')->default(0);
             $table->timestamps();
             $table->softDeletes();
         });

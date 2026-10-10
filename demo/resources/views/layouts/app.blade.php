@@ -10,5 +10,6 @@
 <body>
     <main>{{ $slot }}</main>
     @livewireScripts
+    @liveQueryScripts
 </body>
 </html>
