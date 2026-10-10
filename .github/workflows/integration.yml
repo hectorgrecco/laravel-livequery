@@ -59,7 +59,7 @@ jobs:
           php artisan vendor:publish --tag=permission-migrations --force
           php artisan vendor:publish --tag=permission-config --force
           php artisan migrate:fresh --seed --force
-          npm run build
+          VITE_REVERB_HOST=reverb.test npm run build
           npx playwright install --with-deps chromium
           php benchmark.php
           php artisan migrate:fresh --seed --force

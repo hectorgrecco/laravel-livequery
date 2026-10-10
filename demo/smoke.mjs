@@ -1,14 +1,132 @@
 import { chromium } from 'playwright';
 import { execFileSync } from 'node:child_process';
+import net from 'node:net';
 
 const base = 'http://127.0.0.1:8000';
-const browser = await chromium.launch({ headless: true });
+const websocketProxy = await createSocksProxy();
+const browser = await chromium.launch({
+    headless: true,
+    args: ['--host-resolver-rules=MAP reverb.test 127.0.0.1'],
+});
 const contextA = await browser.newContext();
-const contextB = await browser.newContext();
+const contextB = await browser.newContext({
+    proxy: { server: websocketProxy.url, bypass: '127.0.0.1' },
+});
 const tenantBContext = await browser.newContext();
 const pageA = await contextA.newPage();
 const pageB = await contextB.newPage();
 const tenantBPage = await tenantBContext.newPage();
+
+async function createSocksProxy() {
+    let offline = false;
+    const clients = new Set();
+    const upstreams = new Set();
+    const server = net.createServer(client => {
+        clients.add(client);
+        client.on('error', handleProxySocketError);
+        client.on('close', () => {
+            clients.delete(client);
+            upstream?.destroy();
+        });
+
+        let stage = 'greeting';
+        let buffered = Buffer.alloc(0);
+        let upstream;
+
+        const reject = (code = 1) => {
+            client.end(Buffer.from([5, code, 0, 1, 0, 0, 0, 0, 0, 0]));
+        };
+
+        const parse = chunk => {
+            buffered = Buffer.concat([buffered, chunk]);
+
+            if (stage === 'greeting') {
+                if (buffered.length < 2) return;
+                const methodCount = buffered[1];
+                if (buffered.length < 2 + methodCount) return;
+                if (!buffered.subarray(2, 2 + methodCount).includes(0)) return reject(2);
+                client.write(Buffer.from([5, 0]));
+                buffered = buffered.subarray(2 + methodCount);
+                stage = 'request';
+            }
+
+            if (stage !== 'request' || buffered.length < 4) return;
+
+            const addressType = buffered[3];
+            let addressLength;
+            let addressOffset = 4;
+
+            if (addressType === 1) addressLength = 4;
+            else if (addressType === 4) addressLength = 16;
+            else if (addressType === 3) {
+                if (buffered.length < 5) return;
+                addressLength = buffered[4];
+                addressOffset = 5;
+            } else {
+                return reject(8);
+            }
+
+            const requestLength = addressOffset + addressLength + 2;
+            if (buffered.length < requestLength) return;
+            if (offline) return reject(1);
+
+            const portOffset = addressOffset + addressLength;
+            const destinationPort = buffered.readUInt16BE(portOffset);
+            const remainder = buffered.subarray(requestLength);
+            buffered = Buffer.alloc(0);
+            stage = 'connecting';
+            upstream = net.connect(destinationPort, '127.0.0.1');
+            upstreams.add(upstream);
+            upstream.on('close', () => upstreams.delete(upstream));
+            upstream.on('error', error => {
+                handleProxySocketError(error);
+                if (stage === 'connecting') reject(5);
+            });
+
+            upstream.once('connect', () => {
+                client.write(Buffer.from([5, 0, 0, 1, 127, 0, 0, 1, destinationPort >> 8, destinationPort & 255]));
+                if (remainder.length > 0) upstream.write(remainder);
+                stage = 'relay';
+                client.off('data', parse);
+                client.pipe(upstream);
+                upstream.pipe(client);
+            });
+
+        };
+
+        client.on('data', parse);
+    });
+
+    await new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', resolve);
+    });
+
+    return {
+        url: `socks5://127.0.0.1:${server.address().port}`,
+        goOffline() {
+            offline = true;
+            for (const client of clients) client.destroy();
+            for (const upstream of upstreams) upstream.destroy();
+        },
+        goOnline() {
+            offline = false;
+        },
+        close() {
+            for (const client of clients) client.destroy();
+            for (const upstream of upstreams) upstream.destroy();
+            server.close();
+        },
+    };
+}
+
+function handleProxySocketError(error) {
+    if (error.code === 'ECONNRESET' || error.code === 'EPIPE') return;
+
+    process.exitCode = 1;
+    console.error('unexpected local WebSocket proxy error', error);
+}
+
 async function poll(check, message, timeout = 15000) {
     const deadline = Date.now() + timeout;
     while (Date.now() < deadline) {
@@ -58,7 +176,7 @@ try {
     const racePage = await raceContext.newPage();
     let allowInitialSocket = false;
     let firstSocketAttempt = true;
-    await racePage.routeWebSocket(/^wss?:\/\/127\.0\.0\.1:8080\/app\//, websocket => {
+    await racePage.routeWebSocket(/^wss?:\/\/reverb\.test:8080\/app\//, websocket => {
         if (firstSocketAttempt) {
             firstSocketAttempt = false;
             websocket.close({ code: 1001, reason: 'simulate initial connection failure' });
@@ -123,12 +241,12 @@ try {
 
     let expectedPendingCount = await pageB.getByTestId('orders').locator('[data-order-id]').count();
     for (let reconnect = 0; reconnect < 2; reconnect++) {
-        await pageB.evaluate(() => window.Echo.connector.pusher.disconnect());
-        await pageB.waitForFunction(() => window.Echo.connector.pusher.connection.state === 'disconnected');
+        websocketProxy.goOffline();
+        await pageB.waitForFunction(() => window.Echo.connector.pusher.connection.state !== 'connected');
         await pageA.getByTestId('create-order').click();
         await queueDrained(pageA);
         if (await pageB.getByTestId('orders').locator('[data-order-id]').count() !== expectedPendingCount) throw new Error('client unexpectedly received updates while disconnected');
-        await pageB.evaluate(() => window.Echo.connector.pusher.connect());
+        websocketProxy.goOnline();
         await pageB.waitForFunction(() => window.Echo.connector.pusher.connection.state === 'connected' && window.Echo.connector.pusher.channel('private-livequery.orders.tenant-a')?.subscribed, undefined, { timeout: 30000 });
         expectedPendingCount++;
         try {
@@ -138,14 +256,21 @@ try {
             throw error;
         }
     }
-    console.log('repeated explicit disconnect/reconnect cycles: each missed broadcast recovered by a fresh query');
+    console.log('repeated TCP network loss/recovery cycles: each missed broadcast recovered by a fresh authorized query');
 
-    await pageB.evaluate(() => window.Livewire.dispatch('livequery-resync'));
+    const browserLifecycle = await contextB.newCDPSession(pageB);
+    websocketProxy.goOffline();
+    await pageB.waitForFunction(() => window.Echo.connector.pusher.connection.state !== 'connected');
+    await browserLifecycle.send('Page.setWebLifecycleState', { state: 'frozen' });
     await pageA.getByTestId('create-order').click();
     await queueDrained(pageA);
-    await poll(async () => await pageB.getByTestId('orders').locator('[data-order-id]').count() === expectedPendingCount + 1, 'query to refresh after browser visibility recovery');
+    websocketProxy.goOnline();
+    await browserLifecycle.send('Page.setWebLifecycleState', { state: 'active' });
+    await pageB.waitForFunction(() => window.Echo.connector.pusher.connection.state === 'connected' && window.Echo.connector.pusher.channel('private-livequery.orders.tenant-a')?.subscribed, undefined, { timeout: 60000 });
+    await poll(async () => await pageB.getByTestId('orders').locator('[data-order-id]').count() === expectedPendingCount + 1, 'query to refresh after browser sleep and wake');
     expectedPendingCount++;
-    console.log('manual recovery event: authorized Livewire query refreshed after a missed invalidation');
+    await browserLifecycle.detach();
+    console.log('browser sleep/wake: frozen page restored its authorized query after network recovery');
 
     const channelsBeforeReload = await pageB.evaluate(() => Object.keys(window.Echo.connector.channels).filter(name => name.includes('livequery.orders.tenant-a')).length);
     await pageB.getByTestId('leave-orders').click();
@@ -185,5 +310,6 @@ try {
     if ((await auth(pageA, 'private-livequery.orders.tenant-a')).status() !== 403) throw new Error('revoked role-derived permission remained authorized');
     console.log('Spatie direct and role permission revocation: endpoint and subsequent query both denied');
 } finally {
+    websocketProxy.close();
     await browser.close();
 }

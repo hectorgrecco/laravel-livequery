@@ -42,8 +42,11 @@ php artisan serve --host=127.0.0.1 --port=8000
 Run the browser smoke test in a fourth terminal:
 
 ```bash
+VITE_REVERB_HOST=reverb.test npm run build
 node smoke.mjs
 ```
+
+The smoke test's browser maps `reverb.test` to loopback so it can interrupt one session's WebSocket independently. Rebuild with plain `npm run build` before using the manual browser demo afterward.
 
 Run the bounded fanout exercise when you want to measure more subscribers:
 
@@ -59,4 +62,4 @@ The demo login routes intentionally identify seeded users by email without a pas
 
 ## What the smoke test checks
 
-The test verifies authorized and rejected requests to Laravel's actual `/broadcasting/auth` endpoint; isolated authenticated browser sessions in two tenants; create, update, reorder, filter, reopen, soft-delete, and restore behavior; an initial WebSocket connection failure and query/subscription race; repeated explicit disconnect/reconnect cycles after missed events; a manual recovery event; Livewire navigation/remount; session expiration; tenant membership changes; and direct plus role-derived permission revocation. It waits for the database queue to drain before considering broadcasts processed. No cloud service is used.
+The test verifies authorized and rejected requests to Laravel's actual `/broadcasting/auth` endpoint; isolated authenticated browser sessions in two tenants; create, update, reorder, filter, reopen, soft-delete, and restore behavior; an initial WebSocket connection failure and query/subscription race; repeated TCP disconnect/reconnect cycles after missed events; Chromium page freeze/wake while disconnected; Livewire navigation/remount; session expiration; tenant membership changes; and direct plus role-derived permission revocation. It waits for the database queue to drain before considering broadcasts processed. No cloud service is used.

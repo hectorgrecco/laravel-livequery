@@ -4,7 +4,10 @@ import { execFileSync } from 'node:child_process';
 const base = 'http://127.0.0.1:8000';
 const browserCount = 10;
 const updateCount = 100;
-const browser = await chromium.launch({ headless: true });
+const browser = await chromium.launch({
+    headless: true,
+    args: ['--host-resolver-rules=MAP reverb.test 127.0.0.1'],
+});
 const pages = [];
 let livewireRequests = 0;
 let inFlightLivewireRequests = 0;
