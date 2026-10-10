@@ -18,6 +18,8 @@ Each run inserts 1,000 Eloquent orders split across ten tenant keys. Two collect
 
 Three earlier runs took 302.11 ms, 264.32 ms, and 263.76 ms. A later run took 517.94 ms (about 1,931 model changes per second). Peak allocated memory grew by 2 MiB. These times include PostgreSQL inserts, Eloquent lifecycle events, observer work, and capturing event objects. They do not measure actual broadcast throughput. The variance illustrates why these local samples should not be treated as a capacity guarantee.
 
+After adding pre-save tenant-key validation, one run took 340.55 ms (about 2,936 model changes per second) with the same 2 MiB peak-memory delta. This single run is an observation of the added validation path, not a before-and-after benchmark; database and machine variance remain significant.
+
 ## Reverb fanout
 
 Command: `cd demo && node fanout.mjs`, with the demo HTTP server, Reverb server, and database queue worker running.
