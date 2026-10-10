@@ -33,7 +33,7 @@ try {
     await openAs(pageA, 1); // role-derived permission
     await openAs(pageB, 3); // direct permission, separate authenticated session
     await pageB.waitForFunction(() => window.Echo?.connector?.pusher?.connection?.state === 'connected');
-    await pageB.waitForFunction(() => Object.values(window.Echo.connector.channels).some(channel => channel.name.includes('livequery.orders.tenant-a')));
+    await pageB.waitForFunction(() => Object.values(window.Echo.connector.channels).some(channel => channel.name.includes('livequery.orders.tenant-a') && channel.subscribed));
 
     if ((await auth(pageB, 'private-livequery.orders.tenant-a')).status() !== 200) throw new Error('authorized user could not authenticate');
     if ((await auth(pageB, 'private-livequery.orders.tenant-b')).status() !== 403) throw new Error('cross-tenant channel access was not denied');

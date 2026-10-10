@@ -61,6 +61,8 @@ jobs:
           php artisan migrate:fresh --seed --force
           npm run build
           npx playwright install --with-deps chromium
+          php benchmark.php
+          php artisan migrate:fresh --seed --force
       - name: Run Reverb and browser integration
         working-directory: demo
         run: |
@@ -76,8 +78,8 @@ jobs:
             sleep 1
           done
           curl --fail --silent http://127.0.0.1:8000/up >/dev/null
-          php benchmark.php
-          php artisan migrate:fresh --seed --force
-          node fanout.mjs
-          php artisan migrate:fresh --seed --force
           node smoke.mjs
+          php artisan db:seed --force
+          php artisan permission:cache-reset
+          php artisan tinker --execute "DB::table('orders')->delete();"
+          node fanout.mjs
