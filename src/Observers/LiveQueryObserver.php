@@ -9,6 +9,11 @@ final class LiveQueryObserver
 {
     public function __construct(private readonly LiveQueryManager $manager) {}
 
+    public function saving(Model $model): void
+    {
+        $this->manager->validateTenantKeys($model);
+    }
+
     public function created(Model $model): void
     {
         $this->manager->changed($model, 'created');

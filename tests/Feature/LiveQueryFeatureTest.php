@@ -100,6 +100,19 @@ it('rejects non-scalar tenant attributes', function (): void {
     expect(fn () => $definition->currentTenant($order))->toThrow(InvalidArgumentException::class);
 });
 
+it('rejects malformed tenant identifiers before creating or updating a model', function (): void {
+    $order = new Order(['tenant_id' => 'company.a', 'status' => 'pending']);
+
+    expect(fn () => $order->save())->toThrow(InvalidArgumentException::class)
+        ->and(Order::query()->count())->toBe(0);
+
+    $order = Order::create(['tenant_id' => 'company_a', 'status' => 'pending']);
+    $order->setAttribute('tenant_id', 'company.a');
+
+    expect(fn () => $order->save())->toThrow(InvalidArgumentException::class)
+        ->and($order->fresh()->getAttribute('tenant_id'))->toBe('company_a');
+});
+
 it('returns null for a model without current or original tenant values', function (): void {
     $definition = new CollectionDefinition(
         name: 'invoices',
@@ -332,6 +345,25 @@ it('waits for the outer commit after a nested transaction commits', function ():
     DB::commit();
 
     expect($events)->toHaveCount(1);
+});
+
+it('defers every update invalidation until the containing transaction commits', function (): void {
+    $order = Order::create(['tenant_id' => 'company_a', 'status' => 'pending']);
+    $events = [];
+    Event::listen(LiveQueryInvalidated::class, function (LiveQueryInvalidated $event) use (&$events): void {
+        $events[] = $event;
+    });
+
+    DB::transaction(function () use ($order, &$events): void {
+        $order->update(['status' => 'processing']);
+        $order->update(['status' => 'shipped']);
+
+        expect($events)->toBe([]);
+    });
+
+    expect($events)->toHaveCount(2)
+        ->and(array_map(fn (LiveQueryInvalidated $event): string => $event->tenant, $events))
+        ->toBe(['company_a', 'company_a']);
 });
 
 it('discards callbacks from a transaction attempt that Laravel retries', function (): void {

@@ -90,4 +90,15 @@ final class LiveQueryManager
             }
         }
     }
+
+    public function validateTenantKeys(Model $model): void
+    {
+        foreach ($this->collectionsFor($model) as $definition) {
+            $definition->currentTenant($model);
+
+            if ($model->exists) {
+                $definition->originalTenant($model);
+            }
+        }
+    }
 }
