@@ -7,7 +7,7 @@
 - [x] Confirm package identity: `hectorgrecco/laravel-livequery`
 - [ ] Enable private vulnerability reporting or configure a private security address
 - [x] Run Pest, Pint, Larastan, Composer validation and dependency audit on PHP 8.4
-- [x] Install by Composer path in a clean Laravel 13 app; verify package discovery and queued log broadcast
+- [x] Install by Composer path in a clean Laravel 13 app; verify package discovery, queued log broadcast, and queued event publication to a local Reverb server
 - [ ] Validate PHP 8.3/8.4/8.5 and Laravel 12/13 in Actions
 - [ ] Manually run end-to-end Reverb/Volt demo with separate authenticated tenants
 - [ ] Check rollback, tenant move, bulk update omission and network failure
