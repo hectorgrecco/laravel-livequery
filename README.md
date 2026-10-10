@@ -55,7 +55,7 @@ Use Laravel's `php artisan install:broadcasting` command to configure broadcasti
 
 ## Register a collection
 
-Call `LiveQuery::register()` during provider boot. Collection names use lowercase letters, digits, and underscores. Tenant keys must be simple ASCII identifiers no longer than 64 characters. The authorization callback is required and denies access when there is no authenticated user or it returns anything other than `true`.
+Call `LiveQuery::register()` during provider boot. Collection names use lowercase letters, digits, and underscores. Tenant keys must be simple ASCII identifiers no longer than 64 characters; registered model saves reject invalid tenant values before writing. The authorization callback is required and denies access when there is no authenticated user or it returns anything other than `true`.
 
 The `tenantColumn` identifies the model attribute used to select the invalidation channel. It does not establish who may subscribe, and it does not scope your Eloquent query. Use Laravel Gates or policies and keep query authorization in the application.
 

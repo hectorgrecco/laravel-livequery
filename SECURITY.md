@@ -13,6 +13,7 @@ Security boundaries:
 - Every channel is private and requires the application to define authorization.
 - Missing authenticated identities are denied before the application callback runs.
 - Broadcaster payloads do not include model attributes.
+- Registered model saves validate tenant identifiers before writing; invalid or non-scalar keys are rejected.
 - Tenant identifiers must be bounded and safe for channel names.
 - Model events do not capture raw SQL or bulk updates.
 - Notifications are not guaranteed durable. A subscriber must refresh on reconnect.
