@@ -64,6 +64,12 @@ it('requires a registered model and a simple tenant column', function (): void {
             model: Order::class,
             tenantColumn: 'tenant-id',
             authorize: fn (): bool => true,
+        ))->toThrow(InvalidArgumentException::class)
+        ->and(fn () => new CollectionDefinition(
+            name: 'orders.invalid',
+            model: Order::class,
+            tenantColumn: 'tenant_id',
+            authorize: fn (): bool => true,
         ))->toThrow(InvalidArgumentException::class);
 });
 

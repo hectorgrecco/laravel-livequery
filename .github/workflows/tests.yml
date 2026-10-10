@@ -75,4 +75,4 @@ jobs:
       - name: Enforce package line coverage
         run: composer test:coverage
       - name: Mutate authorization and tenant definition checks
-        run: vendor/bin/pest --mutate --class='LiveQuery\CollectionDefinition' --covered-only --min=70
+        run: vendor/bin/pest --mutate --class='LiveQuery\CollectionDefinition' --covered-only --min=95
