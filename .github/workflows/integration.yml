@@ -46,6 +46,8 @@ jobs:
           LIVEQUERY_TEST_USERNAME: postgres
           LIVEQUERY_TEST_PASSWORD: livequery
         run: composer test
+      - name: Create demo database
+        run: PGPASSWORD=livequery createdb -h 127.0.0.1 -U postgres livequery_demo
       - name: Install demo dependencies
         working-directory: demo
         run: |
