@@ -32,7 +32,7 @@ jobs:
           php-version: '8.4'
           extensions: mbstring, dom, curl, pdo_pgsql, pgsql
           coverage: none
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
